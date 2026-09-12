@@ -13,8 +13,9 @@ import {
 } from '../components/Icons';
 
 const Expenses = () => {
-  const [searchParams] = useSearchParams();
-  const roomId = searchParams.get('roomId');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const queryRoomId = searchParams.get('roomId');
+  const [roomId, setRoomId] = useState(queryRoomId || '');
   const [expenses, setExpenses] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -38,17 +39,28 @@ const Expenses = () => {
   const [billFile, setBillFile] = useState(null);
   const [billPreview, setBillPreview] = useState(null);
 
+  useEffect(() => {
+    if (queryRoomId && queryRoomId !== roomId) {
+      setRoomId(queryRoomId);
+    }
+  }, [queryRoomId, roomId]);
+
   const loadRooms = useCallback(async () => {
     try {
       const response = await api.get('/rooms');
       setRooms(response.data);
       if (!roomId && response.data.length > 0) {
-        window.location.href = `/expenses?roomId=${response.data[0].id}`;
+        const firstRoomId = response.data[0].id.toString();
+        setRoomId(firstRoomId);
+        setSearchParams({ roomId: firstRoomId }, { replace: true });
+      } else if (!roomId) {
+        setLoading(false);
       }
     } catch (error) {
       console.error('Failed to load rooms:', error);
+      setLoading(false);
     }
-  }, [roomId]);
+  }, [roomId, setSearchParams]);
 
   const loadCategories = useCallback(async () => {
     try {
@@ -375,7 +387,11 @@ const Expenses = () => {
           <div className="relative">
             <select
               value={roomId}
-              onChange={(e) => (window.location.href = `/expenses?roomId=${e.target.value}`)}
+              onChange={(e) => {
+                const selected = e.target.value;
+                setRoomId(selected);
+                setSearchParams({ roomId: selected }, { replace: true });
+              }}
               className="appearance-none pl-4 pr-9 py-2 bg-white border border-[#EAE8E3] rounded-xl text-xs sm:text-sm font-semibold text-slate-800 shadow-soft focus:outline-none focus:ring-2 focus:ring-slate-300 cursor-pointer"
             >
               {rooms.map((room) => (
