@@ -10,27 +10,88 @@ const Register = () => {
     fullName: '',
   });
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
 
+  const validate = (data) => {
+    const errors = {};
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!data.fullName) {
+      errors.fullName = 'Full name is required';
+    } else if (data.fullName.length > 100) {
+      errors.fullName = 'Full name must not exceed 100 characters';
+    }
+
+    if (!data.username) {
+      errors.username = 'Username is required';
+    } else if (data.username.length < 3 || data.username.length > 50) {
+      errors.username = 'Username must be between 3 and 50 characters';
+    }
+
+    if (!data.email) {
+      errors.email = 'Email is required';
+    } else if (!emailRegex.test(data.email)) {
+      errors.email = 'Please provide a valid email address';
+    }
+
+    if (!data.password) {
+      errors.password = 'Password is required';
+    } else if (data.password.length < 6) {
+      errors.password = 'Password must be at least 6 characters';
+    }
+
+    return errors;
+  };
+
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+    if (fieldErrors[name]) {
+      setFieldErrors((prev) => ({ ...prev, [name]: '' }));
+    }
+    if (error) setError('');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setFieldErrors({});
+
+    const trimmedData = {
+      fullName: formData.fullName.trim(),
+      username: formData.username.trim(),
+      email: formData.email.trim(),
+      password: formData.password.trim(),
+    };
+
+    const clientErrors = validate(trimmedData);
+    if (Object.keys(clientErrors).length > 0) {
+      setFieldErrors(clientErrors);
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await register(formData.username, formData.email, formData.password, formData.fullName);
+      await register(trimmedData.username, trimmedData.email, trimmedData.password, trimmedData.fullName);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed. Please try again.');
+      if (!err.response) {
+        setError('Unable to connect to the server. Please check your internet connection or try again later.');
+      } else if (err.response.data?.errors) {
+        setFieldErrors(err.response.data.errors);
+        setError(err.response.data.message || 'Please correct the errors below.');
+      } else if (err.response.data?.message) {
+        setError(err.response.data.message);
+      } else {
+        setError('Registration failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -50,45 +111,53 @@ const Register = () => {
             </Link>
           </p>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit} noValidate>
           {error && (
             <div className="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded">
               {error}
             </div>
           )}
-          <div className="rounded-md shadow-sm space-y-4">
+          <div className="space-y-4">
             <div>
-              <label htmlFor="fullName" className="sr-only">
+              <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">
                 Full Name
               </label>
               <input
                 id="fullName"
                 name="fullName"
                 type="text"
-                required
-                className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                className={`appearance-none relative block w-full px-3 py-2 border ${
+                  fieldErrors.fullName ? 'border-red-400' : 'border-gray-300'
+                } placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
                 placeholder="Full Name"
                 value={formData.fullName}
                 onChange={handleChange}
               />
+              {fieldErrors.fullName && (
+                <p className="mt-1 text-sm text-red-600">{fieldErrors.fullName}</p>
+              )}
             </div>
             <div>
-              <label htmlFor="username" className="sr-only">
+              <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
                 Username
               </label>
               <input
                 id="username"
                 name="username"
                 type="text"
-                required
-                className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                placeholder="Username"
+                className={`appearance-none relative block w-full px-3 py-2 border ${
+                  fieldErrors.username ? 'border-red-400' : 'border-gray-300'
+                } placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
+                placeholder="Username (3-50 characters)"
                 value={formData.username}
                 onChange={handleChange}
               />
+              {fieldErrors.username && (
+                <p className="mt-1 text-sm text-red-600">{fieldErrors.username}</p>
+              )}
             </div>
             <div>
-              <label htmlFor="email" className="sr-only">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                 Email address
               </label>
               <input
@@ -96,15 +165,19 @@ const Register = () => {
                 name="email"
                 type="email"
                 autoComplete="email"
-                required
-                className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                className={`appearance-none relative block w-full px-3 py-2 border ${
+                  fieldErrors.email ? 'border-red-400' : 'border-gray-300'
+                } placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
                 placeholder="Email address"
                 value={formData.email}
                 onChange={handleChange}
               />
+              {fieldErrors.email && (
+                <p className="mt-1 text-sm text-red-600">{fieldErrors.email}</p>
+              )}
             </div>
             <div>
-              <label htmlFor="password" className="sr-only">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
                 Password
               </label>
               <input
@@ -112,12 +185,16 @@ const Register = () => {
                 name="password"
                 type="password"
                 autoComplete="new-password"
-                required
-                className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                className={`appearance-none relative block w-full px-3 py-2 border ${
+                  fieldErrors.password ? 'border-red-400' : 'border-gray-300'
+                } placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm`}
                 placeholder="Password (min 6 characters)"
                 value={formData.password}
                 onChange={handleChange}
               />
+              {fieldErrors.password && (
+                <p className="mt-1 text-sm text-red-600">{fieldErrors.password}</p>
+              )}
             </div>
           </div>
 
