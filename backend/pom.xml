@@ -52,6 +52,13 @@
             <scope>runtime</scope>
         </dependency>
         
+        <!-- Database - PostgreSQL (Production) -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        
         <!-- MySQL (commented out - uncomment if switching back to MySQL) -->
         <!--
         <dependency>
