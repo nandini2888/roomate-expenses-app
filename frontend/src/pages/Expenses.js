@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../utils/api';
 
@@ -25,19 +25,7 @@ const Expenses = () => {
   const [billFile, setBillFile] = useState(null);
   const [billPreview, setBillPreview] = useState(null);
 
-  useEffect(() => {
-    loadRooms();
-    loadCategories();
-  }, []);
-
-  useEffect(() => {
-    if (roomId) {
-      loadExpenses();
-      loadMembers();
-    }
-  }, [roomId]);
-
-  const loadRooms = async () => {
+  const loadRooms = useCallback(async () => {
     try {
       const response = await api.get('/rooms');
       setRooms(response.data);
@@ -47,9 +35,18 @@ const Expenses = () => {
     } catch (error) {
       console.error('Failed to load rooms:', error);
     }
-  };
+  }, [roomId]);
 
-  const loadExpenses = async () => {
+  const loadCategories = useCallback(async () => {
+    try {
+      const response = await api.get('/categories');
+      setCategories(response.data);
+    } catch (error) {
+      console.error('Failed to load categories:', error);
+    }
+  }, []);
+
+  const loadExpenses = useCallback(async () => {
     if (!roomId) return;
     try {
       const response = await api.get('/expenses', {
@@ -61,29 +58,32 @@ const Expenses = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [roomId]);
 
-  const loadMembers = async () => {
+  const loadMembers = useCallback(async () => {
     if (!roomId) return;
     try {
       const response = await api.get(`/rooms/${roomId}/members`);
       setMembers(response.data);
-      if (response.data.length > 0 && !formData.paidById) {
-        setFormData({ ...formData, paidById: response.data[0].userId });
+      if (response.data.length > 0) {
+        setFormData((prev) => (prev.paidById ? prev : { ...prev, paidById: response.data[0].userId }));
       }
     } catch (error) {
       console.error('Failed to load members:', error);
     }
-  };
+  }, [roomId]);
 
-  const loadCategories = async () => {
-    try {
-      const response = await api.get('/categories');
-      setCategories(response.data);
-    } catch (error) {
-      console.error('Failed to load categories:', error);
+  useEffect(() => {
+    loadRooms();
+    loadCategories();
+  }, [loadRooms, loadCategories]);
+
+  useEffect(() => {
+    if (roomId) {
+      loadExpenses();
+      loadMembers();
     }
-  };
+  }, [roomId, loadExpenses, loadMembers]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

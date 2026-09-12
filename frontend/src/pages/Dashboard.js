@@ -1,11 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../utils/api';
-import { useAuth } from '../context/AuthContext';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
 
 const Dashboard = () => {
-  const { user } = useAuth();
   const [rooms, setRooms] = useState([]);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [summary, setSummary] = useState(null);
@@ -16,11 +14,24 @@ const Dashboard = () => {
     loadRooms();
   }, []);
 
+  const loadSummary = useCallback(async () => {
+    if (!selectedRoom) return;
+    try {
+      const [year, monthNum] = month.split('-').map(Number);
+      const response = await api.get(`/summary/${selectedRoom}`, {
+        params: { year, month: monthNum },
+      });
+      setSummary(response.data);
+    } catch (error) {
+      console.error('Failed to load summary:', error);
+    }
+  }, [selectedRoom, month]);
+
   useEffect(() => {
     if (selectedRoom) {
       loadSummary();
     }
-  }, [selectedRoom, month]);
+  }, [selectedRoom, loadSummary]);
 
   const loadRooms = async () => {
     try {
@@ -33,19 +44,6 @@ const Dashboard = () => {
       console.error('Failed to load rooms:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadSummary = async () => {
-    if (!selectedRoom) return;
-    try {
-      const [year, monthNum] = month.split('-').map(Number);
-      const response = await api.get(`/summary/${selectedRoom}`, {
-        params: { year, month: monthNum },
-      });
-      setSummary(response.data);
-    } catch (error) {
-      console.error('Failed to load summary:', error);
     }
   };
 
