@@ -2,6 +2,15 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../utils/api';
 import { validateExpenseForm } from '../utils/expenseValidation';
+import {
+  PlusIcon,
+  ReceiptIcon,
+  EditIcon,
+  TrashIcon,
+  CloseIcon,
+  SearchIcon,
+  ChevronDownIcon,
+} from '../components/Icons';
 
 const Expenses = () => {
   const [searchParams] = useSearchParams();
@@ -13,6 +22,8 @@ const Expenses = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
   const [formData, setFormData] = useState({
     amount: '',
     description: '',
@@ -121,10 +132,13 @@ const Expenses = () => {
       paidById: Number(formData.paidById),
       amount: parseFloat(formData.amount),
       categoryId: formData.categoryId ? Number(formData.categoryId) : null,
-      splits: formData.splitType === 'CUSTOM' ? formData.splits.map(s => ({
-        userId: Number(s.userId),
-        amount: parseFloat(s.amount),
-      })) : null,
+      splits:
+        formData.splitType === 'CUSTOM'
+          ? formData.splits.map((s) => ({
+              userId: Number(s.userId),
+              amount: parseFloat(s.amount),
+            }))
+          : null,
     };
 
     try {
@@ -181,10 +195,11 @@ const Expenses = () => {
       categoryId: expense.categoryId?.toString() || '',
       splitType: expense.splitType,
       paidById: expense.paidById.toString(),
-      splits: expense.splits?.map(s => ({
-        userId: s.userId.toString(),
-        amount: s.amount.toString(),
-      })) || [],
+      splits:
+        expense.splits?.map((s) => ({
+          userId: s.userId.toString(),
+          amount: s.amount.toString(),
+        })) || [],
     });
     setFieldErrors({});
     setError('');
@@ -274,124 +289,297 @@ const Expenses = () => {
   };
 
   // Helper calculation for custom splits
-  const customSplitsTotal = formData.splitType === 'CUSTOM'
-    ? formData.splits.reduce((acc, s) => {
-        const val = parseFloat(s.amount);
-        return acc + (!isNaN(val) && val > 0 ? Math.round(val * 100) : 0);
-      }, 0) / 100
-    : 0;
+  const customSplitsTotal =
+    formData.splitType === 'CUSTOM'
+      ? formData.splits.reduce((acc, s) => {
+          const val = parseFloat(s.amount);
+          return acc + (!isNaN(val) && val > 0 ? Math.round(val * 100) : 0);
+        }, 0) / 100
+      : 0;
   const expenseAmountNum = parseFloat(formData.amount);
   const totalExpenseVal = !isNaN(expenseAmountNum) && expenseAmountNum > 0 ? expenseAmountNum : 0;
   const splitDifference = (totalExpenseVal - customSplitsTotal).toFixed(2);
 
+  // Filter expenses by search term and selected category
+  const filteredExpenses = expenses.filter((exp) => {
+    const matchSearch =
+      exp.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      exp.paidByFullName?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchCat =
+      selectedCategoryFilter === 'ALL' ||
+      (exp.categoryName && exp.categoryName.toUpperCase() === selectedCategoryFilter.toUpperCase());
+    return matchSearch && matchCat;
+  });
+
+  // Category badge color helper
+  const getCategoryTheme = (categoryName) => {
+    const lower = (categoryName || '').toLowerCase();
+    if (lower.includes('food') || lower.includes('grocer')) {
+      return { bg: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' };
+    }
+    if (lower.includes('util') || lower.includes('bill') || lower.includes('wifi')) {
+      return { bg: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' };
+    }
+    if (lower.includes('rent')) {
+      return { bg: 'bg-indigo-50 text-indigo-700 border-indigo-200', dot: 'bg-indigo-500' };
+    }
+    if (lower.includes('shop')) {
+      return { bg: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500' };
+    }
+    if (lower.includes('entertain')) {
+      return { bg: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-500' };
+    }
+    return { bg: 'bg-slate-100 text-slate-700 border-slate-200', dot: 'bg-slate-400' };
+  };
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center space-y-3">
+          <div className="w-10 h-10 border-3 border-slate-200 border-t-slate-900 rounded-full animate-spin"></div>
+          <p className="text-xs font-semibold text-slate-500">Loading expenses...</p>
+        </div>
       </div>
     );
   }
 
   if (!roomId) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <p className="text-gray-600">Please select a room to view expenses.</p>
+      <div className="max-w-md mx-auto py-16 text-center">
+        <p className="text-slate-500 text-sm">Please select a room to view expenses.</p>
       </div>
     );
   }
 
+  const currentRoom = rooms.find((r) => r.id === Number(roomId));
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex justify-between items-center mb-6">
+    <div className="space-y-7 animate-fade-in pb-12">
+      {/* 1. Top Header & Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Expenses</h1>
-          <select
-            value={roomId}
-            onChange={(e) => window.location.href = `/expenses?roomId=${e.target.value}`}
-            className="mt-2 block rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-          >
-            {rooms.map((room) => (
-              <option key={room.id} value={room.id}>
-                {room.name}
-              </option>
-            ))}
-          </select>
+          <span className="text-[11px] font-bold uppercase tracking-wider text-coral-500 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-100 inline-block mb-1.5">
+            Ledger & Receipts
+          </span>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center space-x-2">
+            <span>Expenses</span>
+            <span className="text-xl">💳</span>
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            Track, split, and attach bills for every shared transaction.
+          </p>
         </div>
-        <button
-          onClick={() => {
-            resetForm();
-            setShowModal(true);
-          }}
-          className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-md text-sm font-medium"
-        >
-          Add Expense
-        </button>
+
+        {/* Room Selector & Add Expense Button */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <select
+              value={roomId}
+              onChange={(e) => (window.location.href = `/expenses?roomId=${e.target.value}`)}
+              className="appearance-none pl-4 pr-9 py-2 bg-white border border-[#EAE8E3] rounded-xl text-xs sm:text-sm font-semibold text-slate-800 shadow-soft focus:outline-none focus:ring-2 focus:ring-slate-300 cursor-pointer"
+            >
+              {rooms.map((room) => (
+                <option key={room.id} value={room.id}>
+                  {room.name}
+                </option>
+              ))}
+            </select>
+            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
+              <ChevronDownIcon className="w-4 h-4" />
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              resetForm();
+              setShowModal(true);
+            }}
+            className="flex items-center space-x-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-bold rounded-xl shadow-soft transition"
+          >
+            <PlusIcon className="w-4 h-4" />
+            <span>Add Expense</span>
+          </button>
+        </div>
       </div>
 
-      <div className="bg-white shadow overflow-hidden sm:rounded-md">
-        <ul className="divide-y divide-gray-200">
-          {expenses.map((expense) => (
-            <li key={expense.id} className="px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center">
-                    <p className="text-sm font-medium text-gray-900">
-                      {expense.description}
-                    </p>
-                    <span className="ml-2 text-sm text-gray-500">
-                      - {expense.categoryName || 'Uncategorized'}
-                    </span>
-                    {expense.hasBill && (
-                      <button
-                        onClick={() => handleViewBill(expense.id)}
-                        className="ml-2 text-primary-600 hover:text-primary-700 text-sm"
-                      >
-                        📄 View Bill
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-500">
-                    Paid by {expense.paidByFullName} on {expense.expenseDate}
-                  </p>
-                </div>
-                <div className="flex items-center space-x-4">
-                  <span className="text-lg font-semibold text-gray-900">
-                    ${parseFloat(expense.amount).toFixed(2)}
-                  </span>
-                  <button
-                    onClick={() => handleEdit(expense)}
-                    className="text-primary-600 hover:text-primary-700 text-sm"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(expense.id)}
-                    className="text-red-600 hover:text-red-700 text-sm"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            </li>
+      {/* 2. Filter & Search Row */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 rounded-2xl bg-white border border-[#EAE8E3] shadow-soft">
+        {/* Search Bar */}
+        <div className="relative w-full sm:w-72">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+            <SearchIcon className="w-4 h-4" />
+          </div>
+          <input
+            type="text"
+            placeholder="Search description, payer..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-300"
+          />
+        </div>
+
+        {/* Category Pills */}
+        <div className="flex items-center space-x-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 text-xs">
+          <button
+            onClick={() => setSelectedCategoryFilter('ALL')}
+            className={`px-3 py-1 rounded-lg font-semibold transition shrink-0 ${
+              selectedCategoryFilter === 'ALL'
+                ? 'bg-slate-900 text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            All
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => setSelectedCategoryFilter(cat.name)}
+              className={`px-3 py-1 rounded-lg font-semibold transition shrink-0 ${
+                selectedCategoryFilter === cat.name
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {cat.name}
+            </button>
           ))}
-        </ul>
+        </div>
       </div>
 
+      {/* 3. Expense List */}
+      <div className="bg-white rounded-3xl border border-[#EAE8E3] shadow-soft overflow-hidden">
+        {filteredExpenses.length > 0 ? (
+          <div className="divide-y divide-slate-100">
+            {filteredExpenses.map((expense) => {
+              const theme = getCategoryTheme(expense.categoryName);
+              const initials = (expense.paidByFullName || 'User')
+                .split(' ')
+                .map((n) => n[0])
+                .join('')
+                .substring(0, 2)
+                .toUpperCase();
+
+              return (
+                <div
+                  key={expense.id}
+                  className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/50 transition"
+                >
+                  {/* Left: Category Badge & Details */}
+                  <div className="flex items-start sm:items-center space-x-3.5">
+                    {/* Category icon container */}
+                    <div className="w-11 h-11 rounded-2xl bg-cream-200 text-slate-700 flex items-center justify-center shrink-0 border border-[#EAE8E3]">
+                      <ReceiptIcon className="w-5 h-5 text-slate-700" />
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold text-sm sm:text-base text-slate-900">
+                          {expense.description}
+                        </span>
+                        <span
+                          className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${theme.bg}`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${theme.dot}`}></span>
+                          <span>{expense.categoryName || 'General'}</span>
+                        </span>
+
+                        {expense.hasBill && (
+                          <button
+                            onClick={() => handleViewBill(expense.id)}
+                            className="inline-flex items-center space-x-1 text-xs font-semibold text-sky-600 hover:text-sky-700 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-100 transition"
+                            title="View attached bill receipt"
+                          >
+                            <span>📄 Bill</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center space-x-2 text-xs text-slate-500">
+                        <div className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-[9px] font-bold">
+                          {initials}
+                        </div>
+                        <span>Paid by <strong>{expense.paidByFullName}</strong></span>
+                        <span>•</span>
+                        <span>{expense.expenseDate}</span>
+                        {expense.splitType === 'CUSTOM' && (
+                          <>
+                            <span>•</span>
+                            <span className="text-amber-600 font-semibold">Custom Split</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Amount & Actions */}
+                  <div className="flex items-center justify-between sm:justify-end space-x-4 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                    <span className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+                      ${parseFloat(expense.amount).toFixed(2)}
+                    </span>
+
+                    <div className="flex items-center space-x-1.5">
+                      <button
+                        onClick={() => handleEdit(expense)}
+                        className="p-2 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition"
+                        title="Edit expense"
+                      >
+                        <EditIcon className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(expense.id)}
+                        className="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition"
+                        title="Delete expense"
+                      >
+                        <TrashIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="py-16 text-center text-slate-400 text-xs">
+            No expenses found matching your criteria.
+          </div>
+        )}
+      </div>
+
+      {/* 4. Add / Edit Expense Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              {editingExpense ? 'Edit Expense' : 'Add New Expense'}
-            </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs overflow-y-auto">
+          <div className="w-full max-w-xl bg-white rounded-3xl shadow-card border border-[#EAE8E3] p-6 sm:p-8 my-8 animate-fade-in">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="font-bold text-base text-slate-900">
+                  {editingExpense ? 'Edit Expense' : 'Add New Expense'}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Record shared payment for {currentRoom?.name || 'this space'}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowModal(false);
+                  resetForm();
+                }}
+                className="p-1 text-slate-400 hover:text-slate-700"
+              >
+                <CloseIcon className="w-5 h-5" />
+              </button>
+            </div>
+
             {error && (
-              <div className="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+              <div className="mb-4 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">
                 {error}
               </div>
             )}
-            <form onSubmit={handleSubmit} noValidate>
-              <div className="grid grid-cols-2 gap-4 mb-4">
+
+            <form onSubmit={handleSubmit} noValidate className="space-y-4">
+              {/* Row 1: Amount & Date */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                     Amount ($) *
                   </label>
                   <input
@@ -399,59 +587,68 @@ const Expenses = () => {
                     step="0.01"
                     min="0.01"
                     placeholder="0.00"
-                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 ${
-                      fieldErrors.amount ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                    className={`w-full px-3.5 py-2.5 border rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 ${
+                      fieldErrors.amount
+                        ? 'border-rose-400 bg-rose-50/40 focus:ring-rose-500'
+                        : 'border-slate-200 focus:ring-slate-300'
                     }`}
                     value={formData.amount}
                     onChange={(e) => handleFieldChange('amount', e.target.value)}
                   />
                   {fieldErrors.amount && (
-                    <p className="mt-1 text-xs text-red-600">{fieldErrors.amount}</p>
+                    <p className="mt-1 text-xs text-rose-600 font-medium">{fieldErrors.amount}</p>
                   )}
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                     Date *
                   </label>
                   <input
                     type="date"
-                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 ${
-                      fieldErrors.expenseDate ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                    className={`w-full px-3.5 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 ${
+                      fieldErrors.expenseDate
+                        ? 'border-rose-400 bg-rose-50/40 focus:ring-rose-500'
+                        : 'border-slate-200 focus:ring-slate-300'
                     }`}
                     value={formData.expenseDate}
                     onChange={(e) => handleFieldChange('expenseDate', e.target.value)}
                   />
                   {fieldErrors.expenseDate && (
-                    <p className="mt-1 text-xs text-red-600">{fieldErrors.expenseDate}</p>
+                    <p className="mt-1 text-xs text-rose-600 font-medium">{fieldErrors.expenseDate}</p>
                   )}
                 </div>
               </div>
 
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Description *
                 </label>
                 <input
                   type="text"
-                  placeholder="What was this expense for?"
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 ${
-                    fieldErrors.description ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                  placeholder="e.g. Monthly Wi-Fi bill, Trader Joe's groceries"
+                  className={`w-full px-3.5 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 ${
+                    fieldErrors.description
+                      ? 'border-rose-400 bg-rose-50/40 focus:ring-rose-500'
+                      : 'border-slate-200 focus:ring-slate-300'
                   }`}
                   value={formData.description}
                   onChange={(e) => handleFieldChange('description', e.target.value)}
                 />
                 {fieldErrors.description && (
-                  <p className="mt-1 text-xs text-red-600">{fieldErrors.description}</p>
+                  <p className="mt-1 text-xs text-rose-600 font-medium">{fieldErrors.description}</p>
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-4">
+              {/* Row 2: Category & Paid By */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                     Category
                   </label>
                   <select
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white"
                     value={formData.categoryId}
                     onChange={(e) => handleFieldChange('categoryId', e.target.value)}
                   >
@@ -463,13 +660,16 @@ const Expenses = () => {
                     ))}
                   </select>
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                     Paid By *
                   </label>
                   <select
-                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 ${
-                      fieldErrors.paidById ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                    className={`w-full px-3.5 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 bg-white ${
+                      fieldErrors.paidById
+                        ? 'border-rose-400 bg-rose-50/40 focus:ring-rose-500'
+                        : 'border-slate-200 focus:ring-slate-300'
                     }`}
                     value={formData.paidById}
                     onChange={(e) => handleFieldChange('paidById', e.target.value)}
@@ -482,52 +682,70 @@ const Expenses = () => {
                     ))}
                   </select>
                   {fieldErrors.paidById && (
-                    <p className="mt-1 text-xs text-red-600">{fieldErrors.paidById}</p>
+                    <p className="mt-1 text-xs text-rose-600 font-medium">{fieldErrors.paidById}</p>
                   )}
                 </div>
               </div>
 
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Split Type *
+              {/* Split Type Selector */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Split Strategy *
                 </label>
-                <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                  value={formData.splitType}
-                  onChange={(e) => handleFieldChange('splitType', e.target.value)}
-                >
-                  <option value="EQUAL">Equal Split</option>
-                  <option value="CUSTOM">Custom Split</option>
-                </select>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleFieldChange('splitType', 'EQUAL')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition text-center ${
+                      formData.splitType === 'EQUAL'
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-soft'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    Equal Split
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleFieldChange('splitType', 'CUSTOM')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition text-center ${
+                      formData.splitType === 'CUSTOM'
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-soft'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    Custom Split
+                  </button>
+                </div>
               </div>
 
+              {/* Custom Split Builder */}
               {formData.splitType === 'CUSTOM' && (
-                <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-md">
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Custom Splits *
-                    </label>
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-slate-800">Custom Splits *</span>
                     <button
                       type="button"
                       onClick={addSplit}
-                      className="text-sm font-medium text-primary-600 hover:text-primary-700"
+                      className="text-xs font-bold text-sky-600 hover:text-sky-700"
                     >
-                      + Add Member Split
+                      + Add Member
                     </button>
                   </div>
 
-                  {/* Split total summary indicator */}
-                  <div className="flex justify-between items-center text-xs py-1.5 px-2 mb-3 rounded bg-white border border-gray-200">
-                    <span className="text-gray-600">
-                      Total Allocated: <strong className="text-gray-900">${customSplitsTotal.toFixed(2)}</strong> / ${totalExpenseVal.toFixed(2)}
+                  {/* Balance Calculator Indicator */}
+                  <div className="flex justify-between items-center text-xs py-2 px-3 rounded-xl bg-white border border-slate-200 shadow-xs">
+                    <span className="text-slate-600">
+                      Allocated: <strong>${customSplitsTotal.toFixed(2)}</strong> / ${totalExpenseVal.toFixed(2)}
                     </span>
-                    <span className={`font-semibold ${
-                      splitDifference === '0.00'
-                        ? 'text-green-600'
-                        : splitDifference > 0
-                        ? 'text-amber-600'
-                        : 'text-red-600'
-                    }`}>
+                    <span
+                      className={`font-bold ${
+                        splitDifference === '0.00'
+                          ? 'text-emerald-600'
+                          : splitDifference > 0
+                          ? 'text-amber-600'
+                          : 'text-rose-600'
+                      }`}
+                    >
                       {splitDifference === '0.00'
                         ? '✓ Balanced'
                         : splitDifference > 0
@@ -537,7 +755,7 @@ const Expenses = () => {
                   </div>
 
                   {fieldErrors.splits && (
-                    <div className="mb-3 p-2 bg-red-50 border border-red-300 text-xs text-red-700 rounded">
+                    <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 font-medium">
                       {fieldErrors.splits}
                     </div>
                   )}
@@ -545,12 +763,12 @@ const Expenses = () => {
                   {formData.splits.map((split, index) => {
                     const rowErr = fieldErrors.splitRows && fieldErrors.splitRows[index];
                     return (
-                      <div key={index} className="mb-2">
+                      <div key={index} className="space-y-1">
                         <div className="flex items-center space-x-2">
                           <div className="flex-1">
                             <select
-                              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 ${
-                                rowErr?.userId ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                              className={`w-full px-3 py-2 border rounded-xl text-xs bg-white ${
+                                rowErr?.userId ? 'border-rose-400 bg-rose-50/50' : 'border-slate-200'
                               }`}
                               value={split.userId}
                               onChange={(e) => updateSplit(index, 'userId', e.target.value)}
@@ -569,8 +787,8 @@ const Expenses = () => {
                               step="0.01"
                               min="0.01"
                               placeholder="Amount ($)"
-                              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 ${
-                                rowErr?.amount ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                              className={`w-full px-3 py-2 border rounded-xl text-xs ${
+                                rowErr?.amount ? 'border-rose-400 bg-rose-50/50' : 'border-slate-200'
                               }`}
                               value={split.amount}
                               onChange={(e) => updateSplit(index, 'amount', e.target.value)}
@@ -579,16 +797,16 @@ const Expenses = () => {
                           <button
                             type="button"
                             onClick={() => removeSplit(index)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 transition"
                             title="Remove split"
-                            className="text-gray-400 hover:text-red-600 px-2 py-1 text-sm font-semibold"
                           >
                             ✕
                           </button>
                         </div>
                         {(rowErr?.userId || rowErr?.amount) && (
-                          <div className="flex space-x-2 mt-1 px-1">
-                            <p className="flex-1 text-xs text-red-600">{rowErr?.userId || ''}</p>
-                            <p className="flex-1 text-xs text-red-600">{rowErr?.amount || ''}</p>
+                          <div className="flex space-x-2 px-1">
+                            <p className="flex-1 text-[11px] text-rose-600 font-medium">{rowErr?.userId || ''}</p>
+                            <p className="flex-1 text-[11px] text-rose-600 font-medium">{rowErr?.amount || ''}</p>
                           </div>
                         )}
                       </div>
@@ -597,43 +815,45 @@ const Expenses = () => {
                 </div>
               )}
 
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Bill/Receipt (Optional)
+              {/* Bill / Receipt File Upload */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Bill / Receipt (Optional)
                 </label>
                 <input
                   type="file"
                   accept="image/*,.pdf"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-sm"
+                  className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"
                   onChange={handleBillChange}
                 />
                 {billPreview && (
-                  <div className="mt-2">
+                  <div className="mt-3">
                     <img
                       src={billPreview}
-                      alt="Bill preview"
-                      className="max-w-xs h-auto rounded-md border border-gray-300"
+                      alt="Receipt preview"
+                      className="max-h-36 rounded-xl border border-slate-200 shadow-soft"
                     />
                   </div>
                 )}
               </div>
 
-              <div className="flex justify-end space-x-3 mt-6">
+              {/* Actions */}
+              <div className="flex justify-end space-x-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => {
                     setShowModal(false);
                     resetForm();
                   }}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 text-sm font-medium"
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 text-sm font-medium"
+                  className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow-soft"
                 >
-                  {editingExpense ? 'Update' : 'Create'}
+                  {editingExpense ? 'Update Expense' : 'Create Expense'}
                 </button>
               </div>
             </form>
@@ -645,4 +865,3 @@ const Expenses = () => {
 };
 
 export default Expenses;
-

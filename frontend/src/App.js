@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
-import Navbar from './components/Navbar';
+import AppLayout from './components/AppLayout';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
@@ -14,8 +14,7 @@ function App() {
   return (
     <AuthProvider>
       <Router>
-        <div className="App">
-          <Navbar />
+        <div className="App font-sans antialiased min-h-screen bg-[#FAF9F6] text-slate-900 selection:bg-rose-100 selection:text-rose-900">
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
@@ -23,7 +22,9 @@ function App() {
               path="/dashboard"
               element={
                 <PrivateRoute>
-                  <Dashboard />
+                  <AppLayout>
+                    <Dashboard />
+                  </AppLayout>
                 </PrivateRoute>
               }
             />
@@ -31,7 +32,9 @@ function App() {
               path="/rooms"
               element={
                 <PrivateRoute>
-                  <Rooms />
+                  <AppLayout>
+                    <Rooms />
+                  </AppLayout>
                 </PrivateRoute>
               }
             />
@@ -39,7 +42,9 @@ function App() {
               path="/expenses"
               element={
                 <PrivateRoute>
-                  <Expenses />
+                  <AppLayout>
+                    <Expenses />
+                  </AppLayout>
                 </PrivateRoute>
               }
             />
@@ -47,7 +52,9 @@ function App() {
               path="/summary"
               element={
                 <PrivateRoute>
-                  <Summary />
+                  <AppLayout>
+                    <Summary />
+                  </AppLayout>
                 </PrivateRoute>
               }
             />
