@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
 
 const Summary = () => {
@@ -13,11 +13,25 @@ const Summary = () => {
     loadRooms();
   }, []);
 
+  const loadSummary = useCallback(async () => {
+    if (!selectedRoom) return;
+    try {
+      const [year, monthNum] = month.split('-').map(Number);
+      const response = await api.get(`/summary/${selectedRoom}`, {
+        params: { year, month: monthNum },
+      });
+      setSummary(response.data);
+    } catch (error) {
+      console.error('Failed to load summary:', error);
+      setSummaryError('Unable to load the monthly summary right now. Please try again later.');
+    }
+  }, [selectedRoom, month]);
+
   useEffect(() => {
     if (selectedRoom) {
       loadSummary();
     }
-  }, [selectedRoom, month]);
+  }, [selectedRoom, loadSummary]);
 
   const formatCurrency = (value) => {
     const numericValue = Number(value ?? 0);
@@ -67,23 +81,7 @@ const Summary = () => {
     }
   };
 
-  const loadSummary = async () => {
-    if (!selectedRoom) return;
-
-    setSummaryError('');
-    setSummary(null);
-
-    try {
-      const [year, monthNum] = month.split('-').map(Number);
-      const response = await api.get(`/summary/${selectedRoom}`, {
-        params: { year, month: monthNum },
-      });
-      setSummary(response.data);
-    } catch (error) {
-      console.error('Failed to load summary:', error);
-      setSummaryError('Unable to load the monthly summary right now. Please try again later.');
-    }
-  };
+ 
 
   if (loading) {
     return (
